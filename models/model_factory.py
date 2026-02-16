@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 
 from .cnn_model import CNN, SimpleConvNet
-from .lstm_model import LSTM
 
 
 class ModelFactory:
@@ -214,5 +213,6 @@ class ModelFactory:
                 'image_size': config['image_size'],
                 'description': f"{dataset_name.upper()}数据集使用{model_type}模型"
             }
+
 
         return None
