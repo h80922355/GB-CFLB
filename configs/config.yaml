@@ -1,0 +1,170 @@
+# BC-GBCFL 基于粒球的区块链联邦学习配置文件
+# 支持EMNIST_LETTERS、随机种子、数据集大小限制、智能模型选择
+
+# =============================================================================
+# 核心实验配置
+# =============================================================================
+
+# 随机种子配置 - 确保实验可重现
+random_seed:
+  enabled: true               # 是否启用随机种子设置
+  seed: 42                   # 随机种子值（修改此值进行不同的实验）
+  use_deterministic: true    # 启用确定性算法（完全可重现，但可能影响性能）
+
+# 数据集配置
+dataset:
+  name: "CIFAR10"     # 数据集选择：MNIST | EMNIST_DIGITS | EMNIST_BYCLASS | EMNIST_LETTERS | CIFAR10 | FEMNIST
+  root: "data/datasets"      # 数据集存储路径
+
+  # 数据集大小限制 - 新增功能
+  train_size:          # 训练集大小限制（null=使用全部数据）
+  test_size:            # 测试集大小限制（null=使用全部数据）
+
+  # Non-IID数据划分（模拟真实联邦学习环境）
+  partitioning:
+    enabled: true            # 启用Non-IID数据分布
+    method: "dirichlet"      # 划分方法（目前仅支持dirichlet）
+    alpha: 1               # 控制数据分布不均匀程度（0.1=极不均匀，10.0=较均匀）
+
+  # 标签交换攻击模拟
+  label_swap:
+    enabled: false           # 是否启用标签交换攻击
+    num_clusters: 4          # 受影响的客户端集群数量
+    pairs:                   # 标签交换对（null则随机生成）
+
+  # 数据旋转攻击模拟
+  rotation:
+    enabled: true            # 是否启用数据旋转攻击
+    num_clusters: 4          # 旋转集群数量
+    rotation_angle: 90       # 统一旋转角度（度）
+    rotation_angles:         # 自定义每个集群的旋转角度（null=使用统一角度）
+
+  # 突发式数据变化模拟
+  sudden_change:
+    enabled: false           # 是否启用突发数据变化
+    trigger_round: 50        # 触发变化的轮次
+    affected_ratio: 0.5      # 每个聚类中受影响客户端的比例
+    additional_rotation: 180  # 额外旋转角度（-1表示自动计算360/聚类数）
+
+# =============================================================================
+# 联邦学习基础配置
+# =============================================================================
+
+# 客户端配置
+clients:
+  num_clients: 20            # 参与训练的客户端总数
+  batch_size: 64            # 批次大小（如果为null则根据GPU显存自动调整）
+  train_frac: 0.8            # 每个客户端的训练集比例（剩余为验证集）
+
+# 模型配置
+model:
+  name: "cnn"                # 模型类型：cnn | lstm
+
+# 优化器配置
+optimizer:
+  lr: 0.01                  # 学习率
+  momentum: 0.9             # SGD动量参数（目前仅支持SGD优化器）
+
+# =============================================================================
+# 训练流程配置
+# =============================================================================
+
+training:
+  communication_rounds: 80   # 总通信轮数
+  local_epochs: 3            # 每轮客户端本地训练轮数
+
+  # 粒球聚类算法配置
+  granular_ball:
+    # 基础参数
+    init_rounds: 20           # 初始标准联邦学习轮数（粒球形成前）
+    min_size: 2              # 最小粒球大小（粒球内最少客户端数）
+
+    # 粒球收敛判断
+    convergence_threshold: 0.98    # 收敛阈值（客户端模型相似度）
+    convergence_window_size: 3     # 收敛判断的历史窗口大小
+
+    # 粒球纯度评估
+    purity_threshold: 0.3  # 粒球纯度阈值（触发分裂的阈值）
+    purity_window_size: 1    # 纯度评估的历史窗口大小
+
+    # 粒球操作控制
+    cooling_period: 3        # 粒球操作冷却期（轮数，防止频繁操作）
+
+    # 粒球合并策略（改进）
+    direction_threshold: 1       # 模型中心方向相似度阈值（第二阶段）
+    data_similarity_threshold: 0.5  # 数据相似度阈值（第三阶段）- 新增
+
+    # 客户端重分配
+    similarity_threshold: -1          # 客户端与粒球的最小相似度阈值
+
+# =============================================================================
+# 恶意节点攻击配置（新增）
+# =============================================================================
+
+attack:
+  enabled: false                    # 攻击功能总开关
+
+  parameter_attack:
+    enabled: true                   # 参数更新攻击开关
+    malicious_ratio: 0.2            # 恶意客户端比例（0.2 = 20%）
+    gaussian_variance: 1.0          # 高斯噪声方差
+    start_round: 1                  # 开始攻击的轮次
+
+  voting_attack:
+    enabled: true                   # 投票反转攻击开关
+    malicious_ratio: 0.2            # 恶意委员比例（与parameter_attack共用）
+    start_round: 1                  # 开始攻击的轮次
+
+# =============================================================================
+# 系统输出配置
+# =============================================================================
+
+# 可视化设置
+visualization:
+  plot_interval: 1           # 生成可视化图表的间隔轮数
+  save_models: true          # 是否保存训练后的模型
+
+# 输出路径
+output:
+  dir: "outputs"             # 实验结果输出目录
+
+# =============================================================================
+# 区块链系统配置
+# =============================================================================
+
+blockchain:
+  # 委员会治理
+  committee:
+    size: 5                  # 委员会成员数量
+    consensus_threshold: 0.67 # 共识决策阈值（2/3同意才通过）
+    rotation_interval: 10    # 委员会成员轮换间隔（轮数）
+    rotation_percentage: 1 # 每次轮换的成员比例
+    candidate_pool_percentage: 0.5  # 候选池占总客户端的比例
+
+  # 参数验证机制
+  validation:
+    enabled: true            # 是否启用参数验证
+
+    # 标准FL阶段验证参数
+    standard_phase:
+      norm_threshold: 200.0   # 参数更新范数阈值
+      similarity_threshold: -1  # 相似度阈值
+
+    # 粒球FL阶段验证参数
+    ball_phase:
+      norm_threshold: 50.0   # 参数更新范数阈值
+      similarity_threshold: -0.8  # 相似度阈值
+
+  # 信誉与奖励系统
+  reward:
+    base_reward: 2.0         # 基础信誉奖励
+    update_reward_factor: 0.5      # 参数更新奖励因子
+    validation_reward_factor: 0.15 # 验证工作奖励因子
+    governance_reward_factor: 0.2  # 治理参与奖励因子
+    max_reward_coefficient: 4.0    # 最大奖励系数
+    validation_penalty_ratio: 0.1 # 验证失败惩罚比例
+    block_failure_penalty_ratio: 0.25  # 区块失败惩罚比例
+
+  # 数据存储
+  storage:
+    path: "./parameter_storage"    # 模型参数存储路径
